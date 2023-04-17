@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ "windows-2022"]
+        runner: [ "macos-12"]
         qt: [ 6 ]
         generator: [ "MSVC", "GCC", "Clang" ]
         exclude:
