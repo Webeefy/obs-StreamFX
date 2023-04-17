@@ -31,13 +31,13 @@ jobs:
           - runner: windows-2022
             qt: 5
         include:
-          # Windows supports MSVC
-          - runner: windows-2022
-            name: "Windows"
-            package_name: "windows"
-            CMAKE_SYSTEM_VERSION: "10.0.20348.0"
-            CMAKE_GENERATOR: "Visual Studio 17 2022"
-            CMAKE_GENERATOR_PLATFORM: "x64"
+          # MacOS supports Clang
+          - runner: macos-12
+            name: "MacOS"
+            package_name: "macos"
+            CMAKE_GENERATOR: "Xcode"
+            CMAKE_OSX_DEPLOYMENT_TARGET: "10.15"
+            CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
 
     runs-on: "${{ matrix.runner }}"
     name: "${{ matrix.name }} (${{ matrix.generator }}, Qt${{ matrix.qt }})"
@@ -56,18 +56,14 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
-    - name: "Install LLVM/Clang (Windows)"
-      if: startsWith( matrix.runner, 'windows' )
+    - name: 'Install Packages (MacOS)'
+      if: startsWith( matrix.runner, 'macos' )
+      shell: bash
       run: |
-        curl "-kL" "https://github.com/llvm/llvm-project/releases/download/llvmorg-14.0.4/LLVM-14.0.4-win64.exe" "-f" "--retry" "5" "-o" "llvm.exe"
-        7z x -y -o"C:\Program Files\LLVM" llvm.exe "bin" "include" "lib" "libexec" "share" "Uninstall.exe"
-        echo "CLANG_PATH=\"C:\\Program Files\\LLVM\\bin\"" >> "${GITHUB_ENV}"
-        
-    - name: "Install InnoSetup (Windows)"
-      if: startsWith( matrix.runner, 'windows' )
-      run: |
-        curl "-kL" "https://cdn.xaymar.com/ci/innosetup-6.2.1.exe" "-f" "--retry" "5" "-o" "inno.exe"
-        .\inno.exe /VERYSILENT /SP- /SUPPRESSMSGBOXES /NORESTART
+        curl -kL https://cdn.xaymar.com/ci/Packages-1.2.10.dmg -f --retry 5 -o "Packages.dmg"
+        sudo hdiutil attach ./Packages.dmg
+        pushd /Volumes/Packages*
+        sudo installer -pkg ./Install\ Packages.pkg -target /
 
     - name: "Setup Build Tools and Gather Information"
       id: info
@@ -312,13 +308,12 @@ jobs:
         mkdir "${{ github.workspace }}/build/package"
         cmake --build "${{ github.workspace }}/build/debug" --config Debug --target PACKAGE_7Z
         cmake --build "${{ github.workspace }}/build/release" --config RelWithDebInfo --target PACKAGE_7Z
-    - name: "Packaging (Windows)"
-      if: startsWith( matrix.runner, 'windows' )
-      shell: cmd
+    - name: "Packages (MacOS)"
+      if: startsWith( matrix.runner, 'macos' )
+      shell: bash
       run: |
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /V10 ".\build\debug\installer.iss"
-        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /V10 ".\build\release\installer.iss"
-
+        packagesbuild "${{ github.workspace }}/build/debug/installer.pkgproj"
+        packagesbuild "${{ github.workspace }}/build/release/installer.pkgproj"
     - name: "Artifacts"
       uses: actions/upload-artifact@v3
       with:
