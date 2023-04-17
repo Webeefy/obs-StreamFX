@@ -29,7 +29,7 @@ jobs:
           - runner: macos-12
             generator: GCC
           - runner: macos-12
-            qt: 5
+            qt: 6
         include:
           # MacOS supports Clang
           - runner: macos-12
@@ -39,7 +39,7 @@ jobs:
             CMAKE_OSX_DEPLOYMENT_TARGET: "10.15"
             CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
 
-    runs-on: "${{ matrix.runner }}"
+   runs-on: "${{ matrix.runner }}"
     name: "${{ matrix.name }} (${{ matrix.generator }}, Qt${{ matrix.qt }})"
     env:
       CMAKE_GENERATOR: "${{ matrix.CMAKE_GENERATOR }}"
@@ -56,6 +56,13 @@ jobs:
         submodules: recursive
         fetch-depth: 0
 
+    - name: "Install LLVM/Clang (MacOS)"
+      if: startsWith( matrix.runner, 'macos' )
+      shell: bash
+      run: |
+        brew install llvm@14
+        LLVM_LOC=$(brew --prefix llvm@14)
+        echo "CLANG_PATH=${LLVM_LOC}/bin/" >> "${GITHUB_ENV}"
     - name: 'Install Packages (MacOS)'
       if: startsWith( matrix.runner, 'macos' )
       shell: bash
@@ -64,8 +71,7 @@ jobs:
         sudo hdiutil attach ./Packages.dmg
         pushd /Volumes/Packages*
         sudo installer -pkg ./Install\ Packages.pkg -target /
-
-    - name: "Setup Build Tools and Gather Information"
+    - name: "Setup build Tools and gather Information"
       id: info
       shell: bash
       run: |
@@ -231,15 +237,13 @@ jobs:
           "${{ matrix.runner }}-${{ matrix.generator }}-${{ github.ref_name }}-obs${{ env.obs_version }}-obsdeps${{ env.obs_deps_version }}-qt${{ matrix.qt }}-${{ env.CACHE_VERSION }}"
           "${{ matrix.runner }}-${{ matrix.generator }}-main-obs${{ env.obs_version }}-obsdeps${{ env.obs_deps_version }}-qt${{ matrix.qt }}-${{ env.CACHE_VERSION }}"
 
-    - name: "Configure & Build (Debug)"
+    - name: "Configure"
       continue-on-error: true
       shell: bash
-      env:
-        CMAKE_BUILD_TYPE: "Debug"
       run: |
         cmake \
           -S "${{ github.workspace }}" \
-          -B "${{ github.workspace }}/build/debug" \
+          -B "${{ github.workspace }}/build/ci" \
           ${{ env.cmake_generator }} \
           ${{ env.cmake_generator_toolset }} \
           ${{ env.cmake_generator_platform }} \
@@ -250,7 +254,7 @@ jobs:
           -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.CMAKE_OSX_DEPLOYMENT_TARGET }}" \
           -DCMAKE_SYSTEM_VERSION="${{ matrix.CMAKE_SYSTEM_VERSION }}" \
           -DCMAKE_BUILD_TYPE="${{ env.CMAKE_BUILD_TYPE }}" \
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build/debug/install" \
+          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build/ci/install" \
           -DPACKAGE_NAME="streamfx-${{ matrix.package_name }}-debug" \
           -DPACKAGE_PREFIX="${{ github.workspace }}/build/package" \
           -DENABLE_CLANG=TRUE -DCLANG_PATH="${{ env.CLANG_PATH }}" \
@@ -259,63 +263,48 @@ jobs:
           -DQt_DIR="${{ github.workspace }}/build/qt" \
           -DFFmpeg_DIR="${{ github.workspace }}/build/obsdeps" \
           -DCURL_DIR="${{ github.workspace }}/build/obsdeps"
+    - name: "Build: Debug"
+      continue-on-error: true
+      shell: bash
+      env:
+        CMAKE_BUILD_TYPE: "Debug"
+      run: |
         if [[ "${{ matrix.runner }}" = windows* ]]; then
-          cmake --build "build/debug" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
         elif [[ "${{ matrix.runner }}" = ubuntu* ]]; then
-          cmake --build "build/debug" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
         elif [[ "${{ matrix.runner }}" = macos* ]]; then
-          cmake --build "build/debug" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
         fi
-
-    - name: "Configure & Build (Release)"
+    - name: "Build: Release"
       shell: bash
       env:
         CMAKE_BUILD_TYPE: "RelWithDebInfo"
       run: |
-        cmake \
-          -S "${{ github.workspace }}" \
-          -B "${{ github.workspace }}/build/release" \
-          ${{ env.cmake_generator }} \
-          ${{ env.cmake_generator_toolset }} \
-          ${{ env.cmake_generator_platform }} \
-          -DCMAKE_C_COMPILER="${{ env.CC }}" \
-          -DCMAKE_CXX_COMPILER="${{ env.CXX }}" \
-          -DCMAKE_LINKER="${{ env.LD }}" \
-          -DCMAKE_OSX_ARCHITECTURES="${{ matrix.CMAKE_OSX_ARCHITECTURES }}" \
-          -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.CMAKE_OSX_DEPLOYMENT_TARGET }}" \
-          -DCMAKE_SYSTEM_VERSION="${{ matrix.CMAKE_SYSTEM_VERSION }}" \
-          -DCMAKE_BUILD_TYPE="${{ env.CMAKE_BUILD_TYPE }}" \
-          -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build/release/install" \
-          -DPACKAGE_NAME="streamfx-${{ matrix.package_name }}" \
-          -DPACKAGE_PREFIX="${{ github.workspace }}/build/package" \
-          -DENABLE_CLANG=TRUE -DCLANG_PATH="${{ env.CLANG_PATH }}" \
-          -DENABLE_PROFILING=OFF \
-          -Dlibobs_DIR="${{ github.workspace }}/build/obs/install" \
-          -DQt_DIR="${{ github.workspace}}/build/qt" \
-          -DFFmpeg_DIR="${{ github.workspace }}/build/obsdeps" \
-          -DCURL_DIR="${{ github.workspace }}/build/obsdeps"
         if [[ "${{ matrix.runner }}" = windows* ]]; then
-          cmake --build "build/release" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
         elif [[ "${{ matrix.runner }}" = ubuntu* ]]; then
-          cmake --build "build/release" --config ${{ env.CMAKE_BUILD_TYPE }} --target install/strip
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install/strip
         elif [[ "${{ matrix.runner }}" = macos* ]]; then
-          cmake --build "build/release" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
+          cmake --build "build/ci" --config ${{ env.CMAKE_BUILD_TYPE }} --target install
         fi
-
     - name: "Packaging"
       shell: bash
       run: |
         mkdir "${{ github.workspace }}/build/package"
-        cmake --build "${{ github.workspace }}/build/debug" --config Debug --target PACKAGE_7Z
-        cmake --build "${{ github.workspace }}/build/release" --config RelWithDebInfo --target PACKAGE_7Z
-    - name: "Packages (MacOS)"
+        cmake --build "${{ github.workspace }}/build/ci" --config RelWithDebInfo --target PACKAGE_7Z
+    - name: "Packaging (Windows)"
+      if: startsWith( matrix.runner, 'windows' )
+      shell: cmd
+      run: |
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /V10 ".\build\ci\installer.iss"
+    - name: "Packaging (MacOS)"
       if: startsWith( matrix.runner, 'macos' )
       shell: bash
       run: |
-        packagesbuild "${{ github.workspace }}/build/debug/installer.pkgproj"
-        packagesbuild "${{ github.workspace }}/build/release/installer.pkgproj"
+        packagesbuild "${{ github.workspace }}/build/ci/installer.pkgproj"
     - name: "Artifacts"
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v1
       with:
         name: "${{ matrix.runner }}-${{ matrix.generator }}-qt${{ matrix.qt }}"
         path: "${{ github.workspace }}/build/package"
@@ -323,18 +312,8 @@ jobs:
     - name: "Validate clang-format"
       shell: bash
       run: |
-        cmake --build "${{ github.workspace }}/build/debug" --config Debug --target clang-format
-        cmake --build "${{ github.workspace }}/build/release" --config RelWithDebInfo --target clang-format
-        git --no-pager diff --patch --minimal HEAD --
-        git update-index --refresh
-        git diff-index --quiet HEAD --
-
-    - name: "Validate clang-tidy"
-      continue-on-error: true
-      shell: bash
-      run: |
-        cmake --build "${{ github.workspace }}/build/debug" --config Debug --target clang-tidy
-        cmake --build "${{ github.workspace }}/build/release" --config RelWithDebInfo --target clang-tidy
+        cmake --build "${{ github.workspace }}/build/ci" --config Debug --target clang-format
+        cmake --build "${{ github.workspace }}/build/ci" --config RelWithDebInfo --target clang-format
         git --no-pager diff --patch --minimal HEAD --
         git update-index --refresh
         git diff-index --quiet HEAD --
