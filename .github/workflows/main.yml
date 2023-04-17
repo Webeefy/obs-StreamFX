@@ -24,12 +24,12 @@ jobs:
         qt: [ 6 ]
         generator: [ "MSVC", "GCC", "Clang" ]
         exclude:
-          - runner: windows-2022
+          - runner: macos-12
+            generator: MSVC
+          - runner: macos-12
             generator: GCC
-          - runner: windows-2022
-            generator: Clang
-          - runner: windows-2022
-            qt: 5
+          - runner: macos-12
+            qt: 6
         include:
           # MacOS supports Clang
           - runner: macos-12
