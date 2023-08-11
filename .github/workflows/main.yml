@@ -186,46 +186,37 @@ jobs:
     - name: "Dependency: OBS Libraries"
       id: obs
       if: ${{ steps.obs-cache.outputs.cache-hit != 'true' }}
-      shell: bash
       env:
-        CMAKE_BUILD_TYPE: "Release"
+        # obs-studio does not support ClangCL
+        CMAKE_GENERATOR_TOOLSET: ""
+      shell: bash
       run: |
-        # Extra requirements by libobs on Linux.
-        if [[ "${{ matrix.runner }}" = ubuntu* ]]; then
-          sudo apt-get install \
-            libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev \
-            libx264-dev libcurl4-openssl-dev libmbedtls-dev libgl1-mesa-dev libjansson-dev libluajit-5.1-dev python3-dev \
-            libx11-dev libxcb-randr0-dev libxcb-shm0-dev libxcb-xinerama0-dev libxcomposite-dev libxinerama-dev \
-            libxcb1-dev libx11-xcb-dev libxcb-xfixes0-dev swig libcmocka-dev libxss-dev libglvnd-dev libgles2-mesa \
-            libgles2-mesa-dev libwayland-dev \
-            libasound2-dev libfdk-aac-dev libfontconfig-dev libfreetype6-dev libjack-jackd2-dev libpulse-dev \
-            libsndio-dev libspeexdsp-dev libudev-dev libv4l-dev libva-dev libvlc-dev libdrm-dev
-        fi
+        # Apply patches to obs-studio
+        pushd "${{ github.workspace }}/third-party/obs-studio" > /dev/null
+        for f in ../../patches/obs-studio/*.patch; do
+          echo "Applying patch '${f}''..."
+          [ -e "$f" ] || continue
+          git apply "$f"
+        done
+        popd > /dev/null
+
+        # Build obs-studio
         cmake \
           -S "${{ github.workspace }}/third-party/obs-studio" \
           -B "${{ github.workspace }}/build/obs" \
-          ${{ env.cmake_generator }} \
-          ${{ env.cmake_generator_toolset }} \
-          ${{ env.cmake_generator_platform }} \
-          -DCMAKE_C_COMPILER="${{ env.CC }}" \
-          -DCMAKE_CXX_COMPILER="${{ env.CXX }}" \
-          -DCMAKE_LINKER="${{ env.LD }}" \
-          -DCMAKE_OSX_ARCHITECTURES="${{ matrix.CMAKE_OSX_ARCHITECTURES }}" \
-          -DCMAKE_OSX_DEPLOYMENT_TARGET="${{ matrix.CMAKE_OSX_DEPLOYMENT_TARGET }}" \
-          -DCMAKE_SYSTEM_VERSION="${{ matrix.CMAKE_SYSTEM_VERSION }}" \
-          -DCMAKE_BUILD_TYPE="${{ env.CMAKE_BUILD_TYPE }}" \
+          -DCMAKE_SYSTEM_VERSION="${{ env.CMAKE_SYSTEM_VERSION }}" \
           -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/build/obs/install" \
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/obsdeps;${{ github.workspace }}/build/qt" \
           -DENABLE_PLUGINS=OFF \
           -DENABLE_UI=OFF \
-          -DENABLE_SCRIPTING=OFF \
-          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/obsdeps;${{ github.workspace }}/build/qt"
+          -DENABLE_SCRIPTING=OFF
         cmake \
           --build "${{ github.workspace }}/build/obs" \
-          --config Release \
+          --config RelWithDebInfo \
           --target obs-frontend-api
         cmake \
           --install "${{ github.workspace }}/build/obs" \
-          --config Release \
+          --config RelWithDebInfo \
           --component obs_libraries
 
     - name: "Configure (Cache)"
